@@ -8,20 +8,27 @@ Parses the output of a traceroute execution into an AST (Abstract Syntax Tree).
 
 import re
 
-RE_HEADER = re.compile(r'(\S+)\s+\((?:(\d+\.\d+\.\d+\.\d+)|([0-9a-fA-F:]+))\)')
-RE_HOP = re.compile(r'^\s*(\d+)\s+(?:\[AS(\d+)\]\s+)?([\s\S]+?(?=^\s*\d+\s+|^_EOS_))', re.M)
+RE_HEADER = re.compile(r"(\S+)\s+\((?:(\d+\.\d+\.\d+\.\d+)|([0-9a-fA-F:]+))\)")
+RE_HOP = re.compile(
+    r"^\s*(\d+)\s+(?:\[AS(\d+)\]\s+)?([\s\S]+?(?=^\s*\d+\s+|^_EOS_))", re.M
+)
 
-RE_PROBE_NAME = re.compile(r'^([a-zA-z0-9\.-]+)$|^(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$|^([0-9a-fA-F:]+)$')
-RE_PROBE_IP = re.compile(r'\((?:(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})|([0-9a-fA-F:]+))\)+')
-RE_PROBE_RTT = re.compile(r'^(\d+(?:\.?\d+)?)$')
-RE_PROBE_ANNOTATION = re.compile(r'^(!\w*)$')
-RE_PROBE_TIMEOUT = re.compile(r'^(\*)$')
+RE_PROBE_NAME = re.compile(
+    r"^([a-zA-z0-9\.-]+)$|^(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$|^([0-9a-fA-F:]+)$"
+)
+RE_PROBE_IP = re.compile(
+    r"\((?:(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})|([0-9a-fA-F:]+))\)+"
+)
+RE_PROBE_RTT = re.compile(r"^(\d+(?:\.?\d+)?)$")
+RE_PROBE_ANNOTATION = re.compile(r"^(!\w*)$")
+RE_PROBE_TIMEOUT = re.compile(r"^(\*)$")
 
 
 class Traceroute(object):
     """
     Abstraction of a traceroute result.
     """
+
     def __init__(self, dest_name, dest_ip):
         self.dest_name = dest_name
         self.dest_ip = dest_ip
@@ -36,14 +43,16 @@ class Traceroute(object):
             text += str(hop)
         return text
 
+
 class Hop(object):
     """
     Abstraction of a hop in a traceroute.
     """
+
     def __init__(self, idx, asn=None):
-        self.idx = idx # Hop count, starting at 1
-        self.asn = asn # Autonomous System number
-        self.probes = [] # Series of Probe instances
+        self.idx = idx  # Hop count, starting at 1
+        self.asn = asn  # Autonomous System number
+        self.probes = []  # Series of Probe instances
 
     def add_probe(self, probe):
         """Adds a Probe instance to this hop's results."""
@@ -62,32 +71,37 @@ class Hop(object):
         for n, probe in enumerate(self.probes):
             text_probe = str(probe)
             if n:
-                text += (text_len*" ")+text_probe
+                text += (text_len * " ") + text_probe
             else:
                 text += text_probe
         text += "\n"
         return text
 
+
 class Probe(object):
     """
     Abstraction of a probe in a traceroute.
     """
-    def __init__(self, name=None, ip=None, rtt=None, anno=''):
+
+    def __init__(self, name=None, ip=None, rtt=None, anno=""):
         self.name = name
         self.ip = ip
-        self.rtt = rtt # RTT in ms
-        self.anno = anno # Annotation, such as !H, !N, !X, etc
+        self.rtt = rtt  # RTT in ms
+        self.anno = anno  # Annotation, such as !H, !N, !X, etc
 
     def __str__(self):
         if self.rtt:
-            text = "{:s} ({:s}) {:1.3f} ms {:s}\n".format(self.name, self.ip, self.rtt, self.anno)
+            text = "{:s} ({:s}) {:1.3f} ms {:s}\n".format(
+                self.name, self.ip, self.rtt, self.anno
+            )
         else:
             text = "*\n"
         return text
 
+
 def loads(data):
     """Parser entry point. Parses the output of a traceroute execution"""
-    data += "\n_EOS_" # Append EOS token. Helps to match last RE_HOP
+    data += "\n_EOS_"  # Append EOS token. Helps to match last RE_HOP
 
     # Get headers
     match_dest = RE_HEADER.search(data)
@@ -112,7 +126,7 @@ def loads(data):
         # Parse probes data: <name> | <(IP)> | <rtt> | 'ms' | '*'
         probes_data = match_hop[2].split()
         # Get rid of 'ms': <name> | <(IP)> | <rtt> | '*'
-        probes_data = filter(lambda s: s.lower() != 'ms', probes_data)
+        probes_data = [s for s in probes_data if s.lower() != "ms"]
 
         i = 0
         while i < len(probes_data):
@@ -120,7 +134,7 @@ def loads(data):
             name = None
             ip = None
             rtt = None
-            anno = ''
+            anno = ""
 
             # RTT check comes first because RE_PROBE_NAME can confuse rtt with an IP as name
             # The regex RE_PROBE_NAME can be improved
@@ -131,8 +145,8 @@ def loads(data):
             elif RE_PROBE_NAME.match(probes_data[i]):
                 # Matched a name, so next elements are IP and rtt
                 name = probes_data[i]
-                ip = probes_data[i+1].strip('()')
-                rtt = float(probes_data[i+2])
+                ip = probes_data[i + 1].strip("()")
+                rtt = float(probes_data[i + 2])
                 i += 3
             elif RE_PROBE_TIMEOUT.match(probes_data[i]):
                 # Its a timeout, so maybe name and IP have been parsed before
@@ -140,7 +154,14 @@ def loads(data):
                 rtt = None
                 i += 1
             else:
-                ext = "i: %d\nprobes_data: %s\nname: %s\nip: %s\nrtt: %s\nanno: %s" % (i, probes_data, name, ip, rtt, anno)
+                ext = "i: %d\nprobes_data: %s\nname: %s\nip: %s\nrtt: %s\nanno: %s" % (
+                    i,
+                    probes_data,
+                    name,
+                    ip,
+                    rtt,
+                    anno,
+                )
                 raise ParseError("Parse error \n%s" % ext)
             # Check for annotation
             try:
@@ -157,8 +178,10 @@ def loads(data):
 
     return traceroute
 
+
 def load(data):
     return loads(data.read())
+
 
 class ParseError(Exception):
     pass
